@@ -1,5 +1,6 @@
 package com.memoclap;
 
+import com.sun.source.util.SourcePositions;
 import jakarta.enterprise.context.Dependent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -8,6 +9,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
+import java.sql.SQLOutput;
+import java.text.DecimalFormat;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -16,6 +19,7 @@ import java.util.stream.Collectors;
 @Dependent
 public class ActeursAnalyser {
     static final Logger log = LoggerFactory.getLogger(ActeursAnalyser.class);
+
     public LinkedHashMap<Integer, String> getActeursListFromText(File text) throws IOException {
         LinkedHashMap<Integer, String> ordreacteurs = new LinkedHashMap<>();
         var content = Files.readString(text.toPath(), Charset.forName("Utf-8"));
@@ -183,7 +187,7 @@ public class ActeursAnalyser {
                 .map(s -> supprimerParenthesesParole(s.trim()))
                 .filter(s -> isNomSuiviDeParoles(s))
                 .map(s -> recupererPremieresMajuscules(s.trim()).trim())
-                .filter(s->!s.matches(".*\\s\\p{javaUpperCase}")) //TODO: pourquoi j'ai mis ça ?
+                .filter(s->!s.matches(".*\\s\\p{javaUpperCase}"))
                 .distinct()
                 .collect(Collectors.toList());
         nomsAMajuscules.stream().forEach(s-> log.debug(s));
@@ -250,5 +254,32 @@ public class ActeursAnalyser {
                 .filter(s -> s.matches(".*[A-Z\\p{javaUpperCase}].*"))
                 .map(s -> s.trim())
                 .collect(Collectors.toList());
+    }
+
+    public static boolean determinerSiNomsEnMAjuscules(String montexte) {
+        boolean res1 = false;
+        List<String> LineStringArray = new ArrayList<>();
+        System.out.println(montexte);
+        montexte.lines().forEach((line) -> LineStringArray.add(line.trim()));
+        //System.out.println(LineStringArray);
+        long countTot = LineStringArray.size();
+        List<String> LineStringFiltered = LineStringArray.stream()
+                //.map(s -> recupererPremieresMajuscules(s.trim()).trim())
+                //.filter(s->!s.matches(".*\\s\\p{javaUpperCase}"))
+                .filter(s -> s.matches("^(\\p{javaUpperCase}\\s*){4,}.*"))
+                .distinct()
+                .collect(Collectors.toList());
+        System.out.println(LineStringFiltered);
+        long count = LineStringFiltered.size();
+        System.out.println("Total: "+countTot+ " Aplican: "+count);
+        double percent =((count*100.0)/countTot);
+        if( percent >= 80)
+        {            res1=true;
+               }
+        DecimalFormat df = new DecimalFormat("#.00");
+        System.out.println("resultado: "+ df.format(percent)+"% ");
+        LineStringFiltered = conserverQueNomsMajusculesAGauche(LineStringFiltered);
+        System.out.println(LineStringFiltered);
+        return res1;
     }
 }
