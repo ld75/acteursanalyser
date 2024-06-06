@@ -23,7 +23,7 @@ class ActeursAnalyserTest {
         System.out.println(phrase);
         System.out.println(res.get(0));
         Assertions.assertEquals(1,res.size());
-        //Assertions.assertEquals(phrase,res.get(0)); TODO: pour Julia a faire
+        Assertions.assertEquals(phrase,res.get(0)); //TODO: pour Julia a faire: il faut juste copier en dur le string à la place de "phrase"
     }
     @Test
     public void isPossibleFauxNomEstUnFauxNom()
@@ -44,7 +44,7 @@ class ActeursAnalyserTest {
         nommajuscules.add("ALBERTO  Hélas !");
         nommajuscules.add("Natalia blab lala bla");
         List<String> res = ActeursAnalyser.conserverQueNomsMajusculesAGauche(nommajuscules);
-        Assertions.assertEquals("[NASTIA, PEPEL, ALBERTO]",res.toString());
+        Assertions.assertEquals("[LE TARTARE, LA BARONNE, PEPEL, LE SEIGNEUR, NASTIA, ALBERTO]",res.toString()); //TODO: J'ai corrigé ce test Julia. Pour moi celui là est bon.
 
     }
     @Test
@@ -91,7 +91,7 @@ class ActeursAnalyserTest {
     public void suppressionCharSpeciauxDesResources(){
         List<String> speakers = new ArrayList<>();
         String filePath = this.getClass().getClassLoader().getResource("suppressionCharSpeciauxDesResources/Dialogue.txt").getPath();
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
+        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {  //TODO: Julia: je te conseille quand tu commences à avoir une longue methode avec beaucoup de détails techniques de l'extracter. ici par exemple j'extrairais cette methode en l'appelant: "convertFromFileToListOfLines"
             String line;
             while ((line = br.readLine()) != null) {
                 speakers.add(line);
@@ -100,11 +100,11 @@ class ActeursAnalyserTest {
             e.printStackTrace();
         }
 
-        if (!speakers.isEmpty()) {
+        if (!speakers.isEmpty()) { //TODO: Julia: tu es dans un test unitaire donc tu n'as pas besoin de cette condition
             List<String> res = ActeursAnalyser.suppressionCharSpeciaux(speakers);
             System.out.println(speakers.get(0));
             System.out.println(res.get(0));
-            Assertions.assertEquals(1, res.size());
+            Assertions.assertEquals(1, res.size()); //TODO: Julia: ce test ne test pas assez bien. D'ailleurs la methode devrait s'appeler: lignes_suppressionsCharSpeciauxDesLignes_LignesSansCharsSpeciaux
         } else {
             System.out.println("El archivo está vacío o no se pudo leer.");
         }
@@ -112,7 +112,7 @@ class ActeursAnalyserTest {
     }
 
     @Test
-    public void conserverQueNomsMajusculesSansDemstrative() {
+    public void conserverQueNomsMajusculesSansDemstrative() { //TODO: Julia, corriger ce test qui ne passe pas
         List<String> nommajuscules = new ArrayList<>();
         nommajuscules.add("LES MAUVAIS ESPRITS");
         nommajuscules.add("LES BONS");
