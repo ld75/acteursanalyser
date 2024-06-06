@@ -90,7 +90,7 @@ class ActeursAnalyserTest {
     @Test
     public void suppressionCharSpeciauxDesResources(){
         List<String> speakers = new ArrayList<>();
-        String filePath = "C:\\Users\\CATA\\IdeaProjects\\acteursanalyser\\src\\test\\java\\com\\memoclap\\Dialogue.txt";
+        String filePath = this.getClass().getClassLoader().getResource("suppressionCharSpeciauxDesResources/Dialogue.txt").getPath();
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             String line;
             while ((line = br.readLine()) != null) {
