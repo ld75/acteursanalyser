@@ -9,7 +9,6 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.file.Files;
-import java.sql.SQLOutput;
 import java.text.DecimalFormat;
 import java.util.*;
 import java.util.regex.Matcher;
@@ -187,7 +186,7 @@ public class ActeursAnalyser {
                 .map(s -> supprimerParenthesesParole(s.trim()))
                 .filter(s -> isNomSuiviDeParoles(s))
                 .map(s -> recupererPremieresMajuscules(s.trim()).trim())
-                .filter(s->!s.matches(".*\\s\\p{javaUpperCase}"))
+                .filter(s->!s.matches(".*\\s\\p{javaUpperCase}")) //TODO: pour Julia, tu as ici elevé un TODO: pourquoi j'ai mis ça ? Si tu enlève ce commentaire alors ce qui est bien derrière c'est de créer une methode avec un nom bien explicite qui explique pourquoi on fait ça LINKieiengienr
                 .distinct()
                 .collect(Collectors.toList());
         nomsAMajuscules.stream().forEach(s-> log.debug(s));
@@ -259,27 +258,27 @@ public class ActeursAnalyser {
     public static boolean determinerSiNomsEnMAjuscules(String montexte) {
         boolean res1 = false;
         List<String> LineStringArray = new ArrayList<>();
-        System.out.println(montexte);
+        System.out.println(montexte); //TODO: pour Julia: une fois que tu as fini c'est bien d'enlever ces System.out.println. Tu peux cependant les laisser pour les tests unitaires ça ne dérange pas mais pas ici. LINKlajeroiazern
         montexte.lines().forEach((line) -> LineStringArray.add(line.trim()));
         //System.out.println(LineStringArray);
         long countTot = LineStringArray.size();
         List<String> LineStringFiltered = LineStringArray.stream()
-                //.map(s -> recupererPremieresMajuscules(s.trim()).trim())
+                //.map(s -> recupererPremieresMajuscules(s.trim()).trim()) //TODO: pour Julia: si ces commentaires ne servent plus c'est bien de les enlever.
                 //.filter(s->!s.matches(".*\\s\\p{javaUpperCase}"))
-                .filter(s -> s.matches("^(\\p{javaUpperCase}\\s*){4,}.*"))
+                .filter(s -> s.matches("^(\\p{javaUpperCase}\\s*){4,}.*")) //TODO: pour Julia: pareil que LINKieiengienr
                 .distinct()
                 .collect(Collectors.toList());
-        System.out.println(LineStringFiltered);
-        long count = LineStringFiltered.size();
-        System.out.println("Total: "+countTot+ " Aplican: "+count);
+        System.out.println(LineStringFiltered); //TODO: pour Julia. pareil ici. que LINKlajeroiazern
+        long count = LineStringFiltered.size(); // TODO: pour Julia: ce serait mieux de bien renommer cette variable. Déjà une variable n'a pas de majuscule comme premier charactère et moi je lui aurai donné un nom plus métier et plus explicite comme par exemple "lignesAvecMajusculesAuDebut"
+        System.out.println("Total: "+countTot+ " Aplican: "+count); //TODO: pour Julia. pareil ici. que LINKlajeroiazern mais cependant tu peux aussi utiliser un logger grâce à la variable "log"
         double percent =((count*100.0)/countTot);
         if( percent >= 80)
         {            res1=true;
                }
         DecimalFormat df = new DecimalFormat("#.00");
-        System.out.println("resultado: "+ df.format(percent)+"% ");
-        LineStringFiltered = conserverQueNomsMajusculesAGauche(LineStringFiltered);
-        System.out.println(LineStringFiltered);
+        System.out.println("resultado: "+ df.format(percent)+"% "); //TODO: pareil que LINKlajeroiazern
+        LineStringFiltered = conserverQueNomsMajusculesAGauche(LineStringFiltered); //TODO pour Julia: attention ceci est un code qui ne sert à rien
+        System.out.println(LineStringFiltered); //TODO pour Julia: attention ceci est un code qui ne sert à rien. N'oubie pas une methode ne peut pas faire 2 choses! soit elle retourne une valeur, soit elle change l'état mais ne fais pas les deux.
         return res1;
     }
 }
