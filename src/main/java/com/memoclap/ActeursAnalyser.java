@@ -1,15 +1,13 @@
 package com.memoclap;
 
-import com.sun.source.util.SourcePositions;
+import com.memoclap.utils.Utils;
 import jakarta.enterprise.context.Dependent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.IOException;
-import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.text.DecimalFormat;
 import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -18,16 +16,33 @@ import java.util.stream.Collectors;
 @Dependent
 public class ActeursAnalyser {
     static final Logger log = LoggerFactory.getLogger(ActeursAnalyser.class);
+    public static final String LIGNES_AVEC_NOMS_EN_MAJUSCULES_REGEXP = "^[A-Z0-9\\p{javaUpperCase} ]{3,}[\\w\\W]+";
+    public static final String LIGNES_AVEC_NOMS_TOUT_TYPE_REGEXP = "^\\S{2,}[\\w\\p{javaUpperCase} .]*[\\w\\W]+";
 
-    public LinkedHashMap<Integer, String> getActeursListFromText(File text) throws IOException {
-        LinkedHashMap<Integer, String> ordreacteurs = new LinkedHashMap<>();
-        var content = Files.readString(text.toPath(), Charset.forName("Utf-8"));
-        List<String> lignes = Arrays.stream(content.split("\n")).collect(Collectors.toList());
+    public LinkedHashMap<Integer, String> getActeursListFromFile(File text) throws Exception {
+        String content = Files.readString(text.toPath(), StandardCharsets.UTF_8);
+        return getActeursListFromText(content);
+    }
+
+    protected static LinkedHashMap<Integer, String> getActeursListFromText(String content) throws Exception {
+        boolean isNomsEnMaj = determinerSiNomsEnMAjuscules(content);
+        if (isNomsEnMaj) {
+            return getNomsActeursOrdonneFromText(content, (List<String> speaker, String ligne) -> fromLineToListOfRedondances(speaker, ligne, LIGNES_AVEC_NOMS_EN_MAJUSCULES_REGEXP));
+        }
+        else{
+            return getNomsActeursOrdonneFromText(content, (List<String> speaker, String ligne) -> fromLineToListOfRedondances(speaker, ligne, LIGNES_AVEC_NOMS_TOUT_TYPE_REGEXP));
+        }
+    }
+
+    protected static LinkedHashMap<Integer, String> getNomsActeursOrdonneFromText(String content,Utils.ThrowingBiConsumer<List<String>,String,Exception> analyseLineForPossibleActors) throws Exception {
+        List<String> lignes = convertirTexteEnListe(content);
         List<String> speakers = new ArrayList<>();
         for (String ligne:lignes) {
-            analyseLineForPossibleActorsName( speakers, ligne);
+            analyseLineForPossibleActors.accept( speakers, ligne);
         }
+        LinkedHashMap<Integer, String> ordreacteurs = new LinkedHashMap<>();
         speakers = extractionVraisNomsPersonnagesEtNettoyage(speakers);
+        Collections.sort(speakers);
         int i=0;
         for (String speaker : speakers) {
             log.debug(speaker);
@@ -37,6 +52,16 @@ public class ActeursAnalyser {
         return ordreacteurs;
     }
 
+    private static List<String> convertirTexteEnListe(String content) {
+        List<String> lignes = Arrays.stream(content.split("\n")).collect(Collectors.toList());
+        /* TODO: quelle methode est la plus efficace ?
+        List<String> LineStringArray = new ArrayList<>();
+        montexte.lines().forEach((line) -> LineStringArray.add(line.trim()));
+         */
+        return lignes;
+    }
+
+
     private static List<String> extractionVraisNomsPersonnagesEtNettoyage(List<String> speakers) {
         List<String> apparitionsMultiplesSansLesCharsSpecs = suppressionCharSpeciaux(speakers);
         //apparitionsMultiplesSansLesCharsSpecs.stream().forEach(s -> System.out.println("00000000000"+s));
@@ -45,17 +70,17 @@ public class ActeursAnalyser {
         if (choixNomsEnMajuscules)  listeSansLesFauxNoms= suppressionParolesDeNomsMajuscules(listeSansLesFauxNoms);
         List<String> listeSansLesFauxNomsQueRedondants = conservationQueDesMultiplesOccurences(listeSansLesFauxNoms);
         if (choixNomsEnMajuscules) {
-            listeSansLesFauxNomsQueRedondants= ajoutDesActeursParlantDeConcertQuneSeuleFois(listeSansLesFauxNoms, listeSansLesFauxNomsQueRedondants);
-            listeSansLesFauxNomsQueRedondants= ajoutDesActeursParlantQuneSeuleFois(listeSansLesFauxNoms, listeSansLesFauxNomsQueRedondants);
+            ajoutDesActeursParlantDeConcertQuneSeuleFois(listeSansLesFauxNoms, listeSansLesFauxNomsQueRedondants);
+            ajoutDesActeursParlantQuneSeuleFois(listeSansLesFauxNoms, listeSansLesFauxNomsQueRedondants);
         }
         return listeSansLesFauxNomsQueRedondants.stream().distinct().collect(Collectors.toList());
     }
 
     private static List<String> suppressionFauxNoms(List<String> apparitionsMultiplesSansLesCharsSpecs) {
         boolean choixNomsEnMajuscules = isChoixNomsEnMajuscules(apparitionsMultiplesSansLesCharsSpecs);
-        List<String> listeSansLesFauxNoms = new ArrayList<>();
+        List<String> listeSansLesFauxNoms;
         if (choixNomsEnMajuscules) {
-            apparitionsMultiplesSansLesCharsSpecs= conserverQueNomsMajusculesAGauche(apparitionsMultiplesSansLesCharsSpecs);
+            apparitionsMultiplesSansLesCharsSpecs= conserverDistinctQueNomsMajusculesAGauche(apparitionsMultiplesSansLesCharsSpecs);
             listeSansLesFauxNoms = suppressionDeNomsContenus(apparitionsMultiplesSansLesCharsSpecs);
         }
         else{
@@ -67,10 +92,9 @@ public class ActeursAnalyser {
     }
 
     private static boolean isChoixNomsEnMajuscules(List<String> apparitionsMultiplesSansLesCharsSpecs) {
-        long nombreDeNomsAMajuscules = conserverQueNomsMajusculesAGauche(apparitionsMultiplesSansLesCharsSpecs).size();
+        long nombreDeNomsAMajuscules = conserverDistinctQueNomsMajusculesAGauche(apparitionsMultiplesSansLesCharsSpecs).size();
         long nombreDeNomsAMinuscules = analyseNombreDeNomsAMinuscules(apparitionsMultiplesSansLesCharsSpecs);
-        boolean isChoixNomsEnMajuscules = isChoixNomsEnMajuscules(nombreDeNomsAMajuscules, nombreDeNomsAMinuscules);
-        return isChoixNomsEnMajuscules;
+        return isChoixNomsEnMajuscules(nombreDeNomsAMajuscules, nombreDeNomsAMinuscules);
     }
 
     public static boolean isChoixNomsEnMajuscules(long nombreDeNomsAMajuscules, long nombreDeNomsAMinuscules) {
@@ -85,21 +109,18 @@ public class ActeursAnalyser {
     }
 
     static List<String> conservationQueDesMultiplesOccurences(List<String> listeSansLesFauxNoms) {
-        List<String> finalSpeakers = listeSansLesFauxNoms;
-        finalSpeakers.stream().forEach(s -> log.debug(s));
-        return listeSansLesFauxNoms.stream().filter(s -> Collections.frequency(finalSpeakers, s) > 1).collect(Collectors.toList());
+        listeSansLesFauxNoms.forEach(log::debug);
+        return listeSansLesFauxNoms.stream().filter(s -> Collections.frequency(listeSansLesFauxNoms, s) > 1).collect(Collectors.toList());
     }
 
-    private static List<String> ajoutDesActeursParlantDeConcertQuneSeuleFois(List<String> listeSansLesFauxNoms, List<String> listeSansLesFauxNomsQueRedondants) {
-            List<String> listeDePlusieursActeursParlantUneSeuleFois = getListeDePlusieursActeursParlantEnMemeTempsUneSeuleFois(listeSansLesFauxNoms);
-            listeSansLesFauxNomsQueRedondants.addAll(listeDePlusieursActeursParlantUneSeuleFois);
-            return listeSansLesFauxNomsQueRedondants;
+    private static void ajoutDesActeursParlantDeConcertQuneSeuleFois(List<String> listeSansLesFauxNoms, List<String> listeSansLesFauxNomsQueRedondants) {
+        List<String> listeDePlusieursActeursParlantUneSeuleFois = getListeDePlusieursActeursParlantEnMemeTempsUneSeuleFois(listeSansLesFauxNoms);
+        listeSansLesFauxNomsQueRedondants.addAll(listeDePlusieursActeursParlantUneSeuleFois);
     }
 
-    private static List<String> ajoutDesActeursParlantQuneSeuleFois(List<String> listeSansLesFauxNoms, List<String> listeSansLesFauxNomsQueRedondants) {
+    private static void ajoutDesActeursParlantQuneSeuleFois(List<String> listeSansLesFauxNoms, List<String> listeSansLesFauxNomsQueRedondants) {
         List<String> listeDePlusieursActeursParlantUneSeuleFois = getListeAceursMajusculeParlantUneSeuleFois(listeSansLesFauxNoms);
         listeSansLesFauxNomsQueRedondants.addAll(listeDePlusieursActeursParlantUneSeuleFois);
-        return listeSansLesFauxNomsQueRedondants;
     }
 
     static List<String> suppressionDeNomsContenus(List<String> apparitionsMultiplesSansLesCharsSpecs) {
@@ -111,7 +132,7 @@ public class ActeursAnalyser {
                 listeSansLesFauxNoms.add(possibleFauxNom);
                 previous = possibleFauxNom;}
         }
-        listeSansLesFauxNoms.stream().forEach(s-> log.debug(s));
+        listeSansLesFauxNoms.forEach(log::debug);
         return listeSansLesFauxNoms;
 
     }
@@ -147,27 +168,26 @@ public class ActeursAnalyser {
 
     private static List<String> getListeDePlusieursActeursParlantEnMemeTempsUneSeuleFois(List<String> listeSansLesFauxNoms) {
         return listeSansLesFauxNoms.stream()
-            .filter(s->s.contains(" ET "))
-            .filter(s->Collections.frequency(listeSansLesFauxNoms,s)==1)
-            .collect(Collectors.toList());
+                .filter(s->s.contains(" ET "))
+                .filter(s->Collections.frequency(listeSansLesFauxNoms,s)==1)
+                .collect(Collectors.toList());
     }
 
     private static List<String> getListeAceursMajusculeParlantUneSeuleFois(List<String> listeSansLesFauxNoms) {
         return listeSansLesFauxNoms.stream()
-            .filter(s->s.matches("[A-Z0-9\\p{javaUpperCase} ]+"))
-            .filter(s->Collections.frequency(listeSansLesFauxNoms,s)==1)
-            .collect(Collectors.toList());
+                .filter(s->s.matches("[A-Z0-9\\p{javaUpperCase} ]+"))
+                .filter(s->Collections.frequency(listeSansLesFauxNoms,s)==1)
+                .collect(Collectors.toList());
     }
-
-    private static void analyseLineForPossibleActorsName(List<String> speakers, String ligne) {
-        Pattern pattern = Pattern.compile("^\\S{2,}[\\w\\p{javaUpperCase} .]*[\\w\\W]+");
+    protected static void fromLineToListOfRedondances(List<String> speakers, String ligne, String regexp) {
+        Pattern pattern = Pattern.compile(regexp);
         Matcher matcher = pattern.matcher(ligne);
         while (matcher.find()) {
             String speaker = matcher.group().trim();
             speakers.add(speaker);
             if (speaker.contains(" ")) {
                 String nextOccurence = speaker.substring(0, speaker.lastIndexOf(" ") + 1);
-                if (nextOccurence.length()>3) analyseLineForPossibleActorsName(speakers, nextOccurence);
+                if (nextOccurence.length()>3) fromLineToListOfRedondances(speakers, nextOccurence,regexp);
             }
         }
 
@@ -175,36 +195,48 @@ public class ActeursAnalyser {
 
     protected static List<String> suppressionParolesDeNomsMajuscules(List<String> listeSansLesFauxNoms) {
         return listeSansLesFauxNoms.stream()
-                .map(s -> suppressionParolesDeNomMajuscule(s))
+                .map(ActeursAnalyser::suppressionParolesDeNomMajuscule)
                 .collect(Collectors.toList());
     }
 
-    protected static List<String> conserverQueNomsMajusculesAGauche(List<String> apparitionsMultiplesSansLesCharsSpecs) {
+    protected static List<String> conserverDistinctQueNomsMajusculesAGauche(List<String> apparitionsMultiplesSansLesCharsSpecs) {
         List<String> nomsAMajuscules = apparitionsMultiplesSansLesCharsSpecs.stream()
                 .distinct()
-                .filter(s -> nestpasToutMajNiToutEntreParentheses(s))
+                .filter(ActeursAnalyser::nestpasToutMajNiToutEntreParentheses)
                 .map(s -> supprimerParenthesesParole(s.trim()))
-                .filter(s -> isNomSuiviDeParoles(s))
-                .map(s -> recupererPremieresMajuscules(s.trim()).trim())
-                .filter(s->!s.matches(".*\\s\\p{javaUpperCase}")) //TODO: pour Julia, tu as ici elevé un TODO: pourquoi j'ai mis ça ? Si tu enlève ce commentaire alors ce qui est bien derrière c'est de créer une methode avec un nom bien explicite qui explique pourquoi on fait ça LINKieiengienr
+                .filter(ActeursAnalyser::isNomSuiviDeParoles)
+                .map(s -> recupererPremieresMajuscules(s.trim()))
+                .filter(ActeursAnalyser::isOnlyMajusculeLine)
                 .distinct()
                 .collect(Collectors.toList());
-        nomsAMajuscules.stream().forEach(s-> log.debug(s));
+        nomsAMajuscules.forEach(log::debug);
         return nomsAMajuscules;
+    }
+
+    protected static List<String> conserverQueLignesAvecNomsMajusculesAGauche(List<String> apparitionsMultiplesSansLesCharsSpecs) {
+        List<String> nomsAMajuscules = apparitionsMultiplesSansLesCharsSpecs.stream()
+                .distinct()
+                .filter(ActeursAnalyser::nestpasToutMajNiToutEntreParentheses)
+                .map(s -> supprimerParenthesesParole(s.trim()))
+                .filter(ActeursAnalyser::isNomSuiviDeParoles)
+                .map(s -> recupererPremieresMajuscules(s.trim()))
+                .filter(ActeursAnalyser::isOnlyMajusculeLine)
+                .collect(Collectors.toList());
+        nomsAMajuscules.forEach(log::debug);
+        return nomsAMajuscules;
+    }
+    private static boolean isOnlyMajusculeLine(String s) {
+        return !s.matches(".*\\s\\p{javaUpperCase}");
     }
 
     private static boolean isNomSuiviDeParoles(String s) {
         if (s.contains("(")) return false;
-        boolean matches = s.matches("^[A-Z0-9\\p{javaUpperCase} ]{3,}[\\w\\W]+");
-//		log.debug(s + " " + matches);
-        return matches;
+        return s.matches(LIGNES_AVEC_NOMS_EN_MAJUSCULES_REGEXP);
     }
 
     private static boolean nestpasToutMajNiToutEntreParentheses(String s) {
         if (s.matches("^\\(.*$")) return false;
-        boolean res = !s.matches("^[A-Z0-9\\s\\W]*$");
-        //log.debug(s+" " +res);
-        return res;
+        return !s.matches("^[A-Z0-9\\s\\W]*$");
     }
 
     public static boolean isPossibleFauxNomEstDansPreviousDoncFaux(String previous, String possibleFauxNom) {
@@ -217,9 +249,9 @@ public class ActeursAnalyser {
 
     public static String recupererPremieresMajuscules(String stringTrimme) {
         stringTrimme = stringTrimme.replaceAll("\\(\\w\\)","");
-        String out = stringTrimme.replaceAll("(^[A-Z0-9\\p{javaUpperCase} ]{3,})(\\s{1}\\w{1}[\\p{javaLowerCase}\\s]+.*)", "$1");
-//		log.debug(out);
-        return out;
+        String out = stringTrimme.replaceAll("(^[A-Z0-9\\p{javaUpperCase} ]{3,})(\\s?\\W?\\s?\\p{L}{1}\\W?[\\p{javaLowerCase}\\s]+.*)", "$1");
+        out = out.replaceAll("(^[A-Z0-9\\p{javaUpperCase} ]{3,})(\\s+\\p{L}*)", "$1");
+        return out.trim();
     }
 
     protected static String suppressionParolesDeNomMajuscule(String s) {
@@ -229,7 +261,7 @@ public class ActeursAnalyser {
     }
 
     public static String supprimerParenthesesParole(String s) {
-    //	Pattern pattern = Pattern.compile("\\(.*\\)");
+        //	Pattern pattern = Pattern.compile("\\(.*\\)");
         Pattern pattern = Pattern.compile("\\(.*?\\)\\s*");
         Matcher matcher = pattern.matcher(s);
         List<String> matcherlist = new ArrayList<>();
@@ -251,34 +283,38 @@ public class ActeursAnalyser {
                 .map(s -> s.replaceAll("  ", " "))
                 .map(s -> s.replaceAll("\\.", " "))
                 .filter(s -> s.matches(".*[A-Z\\p{javaUpperCase}].*"))
-                .map(s -> s.trim())
+                .map(String::trim)
                 .collect(Collectors.toList());
     }
 
     public static boolean determinerSiNomsEnMAjuscules(String montexte) {
+        List<String> lignes = convertirTexteEnListe(montexte);
+        boolean res1 = determinerSiNomsEnMAjusculesParPourcentage(lignes);
+        if (res1) return res1;
+        return determinerSiNomsEnMajusculesParGroupement(lignes);
+    }
+
+    private static boolean determinerSiNomsEnMajusculesParGroupement(List<String> lignes) {
+        List<String> lignesCommencentParMaj = conserverQueLignesAvecNomsMajusculesAGauche(lignes);
+        List<String> onlymaj = lignesCommencentParMaj.stream().map(ActeursAnalyser::recupererPremieresMajuscules).toList();
+        Map<String, Long> groups = onlymaj.stream().collect(Collectors.groupingBy(i -> i, Collectors.counting()));
+        List<Long> listOccurences = groups.values().stream().distinct().toList();
+        int total = listOccurences.stream().mapToInt(Long::intValue).sum();
+        int nombreAuDelaDe20Pourcent=0;
+        for(Long occurence:listOccurences){
+            if ((Math.toIntExact(occurence)*100/total)>20) nombreAuDelaDe20Pourcent++;
+        }
+        return nombreAuDelaDe20Pourcent >= 2;
+    }
+
+    private static boolean determinerSiNomsEnMAjusculesParPourcentage(List<String> lineStringArray ) {
         boolean res1 = false;
-        List<String> LineStringArray = new ArrayList<>();
-        System.out.println(montexte); //TODO: pour Julia: une fois que tu as fini c'est bien d'enlever ces System.out.println. Tu peux cependant les laisser pour les tests unitaires ça ne dérange pas mais pas ici. LINKlajeroiazern
-        montexte.lines().forEach((line) -> LineStringArray.add(line.trim()));
-        //System.out.println(LineStringArray);
-        long countTot = LineStringArray.size();
-        List<String> LineStringFiltered = LineStringArray.stream()
-                //.map(s -> recupererPremieresMajuscules(s.trim()).trim()) //TODO: pour Julia: si ces commentaires ne servent plus c'est bien de les enlever.
-                //.filter(s->!s.matches(".*\\s\\p{javaUpperCase}"))
-                .filter(s -> s.matches("^(\\p{javaUpperCase}\\s*){4,}.*")) //TODO: pour Julia: pareil que LINKieiengienr
-                .distinct()
-                .collect(Collectors.toList());
-        System.out.println(LineStringFiltered); //TODO: pour Julia. pareil ici. que LINKlajeroiazern
-        long count = LineStringFiltered.size(); // TODO: pour Julia: ce serait mieux de bien renommer cette variable. Déjà une variable n'a pas de majuscule comme premier charactère et moi je lui aurai donné un nom plus métier et plus explicite comme par exemple "lignesAvecMajusculesAuDebut"
-        System.out.println("Total: "+countTot+ " Aplican: "+count); //TODO: pour Julia. pareil ici. que LINKlajeroiazern mais cependant tu peux aussi utiliser un logger grâce à la variable "log"
-        double percent =((count*100.0)/countTot);
-        if( percent >= 80)
-        {            res1=true;
-               }
-        DecimalFormat df = new DecimalFormat("#.00");
-        System.out.println("resultado: "+ df.format(percent)+"% "); //TODO: pareil que LINKlajeroiazern
-        LineStringFiltered = conserverQueNomsMajusculesAGauche(LineStringFiltered); //TODO pour Julia: attention ceci est un code qui ne sert à rien
-        System.out.println(LineStringFiltered); //TODO pour Julia: attention ceci est un code qui ne sert à rien. N'oubie pas une methode ne peut pas faire 2 choses! soit elle retourne une valeur, soit elle change l'état mais ne fais pas les deux.
+        long countTot = lineStringArray.size();
+        List<String> lignesCommencantParMaj =  conserverQueLignesAvecNomsMajusculesAGauche(lineStringArray);
+        long nbLignesStartMaj = lignesCommencantParMaj.size();
+        System.out.println("Total: "+countTot+ " Aplican: "+nbLignesStartMaj); //TODO: pour Julia. il faudra aussi utiliser un logger grâce à la variable "log"
+        double percent =((nbLignesStartMaj*100.0)/countTot);
+        if( percent >= 80) res1=true;
         return res1;
     }
 }
